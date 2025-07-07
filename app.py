@@ -3,28 +3,58 @@ import streamlit as st
 BOARD_SIZE = 15
 ALPHABETS = [chr(i) for i in range(65, 65 + BOARD_SIZE)]
 
-# 세션 상태 초기화
+# 바둑판 배경 스타일 삽입
+st.markdown("""
+    <style>
+    body {
+        background-color: #f5deb3;  /* 연한 나무색 */
+    }
+    .stButton>button {
+        border: 1px solid #444444 !important;
+        border-radius: 50% !important;
+        height: 2em !important;
+        width: 2em !important;
+        padding: 0 !important;
+        font-size: 20px !important;
+        background-color: #deb887 !important;  /* 밝은 황갈색 */
+    }
+    .cell {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 2em;
+        width: 2em;
+        background-color: #f5deb3;  /* 연한 바둑판 색 */
+        border: 1px solid #aaaaaa;
+        font-size: 20px;
+    }
+    .highlight {
+        color: red;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# 상태 초기화
 if "board" not in st.session_state:
     st.session_state.board = [["" for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
     st.session_state.current_player = "⚫"
     st.session_state.winner = None
-    st.session_state.win_coords = []  # 승리선 좌표
+    st.session_state.win_coords = []
 
-st.title("♟️ 렌주룰 오목 게임 (15x15, 승리선 표시 포함)")
+st.title("🪵 렌주룰 오목 게임 (바둑판 스타일 + 33 금지 + 승리 하이라이트)")
 
-# 숫자 헤더 출력
+# 헤더
 header = st.columns(BOARD_SIZE + 1)
 header[0].write(" ")
 for i in range(BOARD_SIZE):
     header[i + 1].markdown(f"<div style='text-align:center'><b>{i+1}</b></div>", unsafe_allow_html=True)
 
-# 승리 체크 함수 (좌표 반환 포함)
+# 승리 조건 검사
 def check_win(x, y, player):
     directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
     for dx, dy in directions:
         count = 1
-        win_positions = [(x, y)]
-
+        win_path = [(x, y)]
         for dir in [1, -1]:
             nx, ny = x, y
             while True:
@@ -32,17 +62,17 @@ def check_win(x, y, player):
                 ny += dy * dir
                 if 0 <= nx < BOARD_SIZE and 0 <= ny < BOARD_SIZE and st.session_state.board[ny][nx] == player:
                     count += 1
-                    win_positions.append((nx, ny))
+                    win_path.append((nx, ny))
                 else:
                     break
         if count >= 5:
-            return win_positions
+            return win_path
     return []
 
-# 열린 3 패턴 체크 (흑돌만 제한)
+# 33 금지 확인
 def is_open_three(x, y, player):
     directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
-    count_open_threes = 0
+    open_three_count = 0
     temp = [row[:] for row in st.session_state.board]
     temp[y][x] = player
 
@@ -58,26 +88,25 @@ def is_open_three(x, y, player):
             idx = line.find("⚫⚫⚫")
             if idx > 0 and idx + 3 < len(line):
                 if line[idx - 1] == "." and line[idx + 3] == ".":
-                    count_open_threes += 1
-    return count_open_threes >= 2
+                    open_three_count += 1
+    return open_three_count >= 2
 
-# 바둑판 그리기
+# 바둑판 출력
 for row in range(BOARD_SIZE):
     cols = st.columns(BOARD_SIZE + 1)
     cols[0].markdown(f"<div style='text-align:center'><b>{ALPHABETS[row]}</b></div>", unsafe_allow_html=True)
     for col in range(BOARD_SIZE):
-        stone = st.session_state.board[row][col]
-        btn_style = "height:2em;width:2em;padding:0;border-radius:50%;font-size:20px;"
-        key = f"{row}-{col}"
+        symbol = st.session_state.board[row][col]
+        is_win = (col, row) in st.session_state.win_coords
 
-        if (col, row) in st.session_state.win_coords:
-            symbol = "🔴"
-            cols[col + 1].markdown(f"<div style='{btn_style}text-align:center'>{symbol}</div>", unsafe_allow_html=True)
-        elif stone:
-            symbol = stone
-            cols[col + 1].markdown(f"<div style='{btn_style}text-align:center'>{symbol}</div>", unsafe_allow_html=True)
+        if is_win:
+            display = "🔴"
+            cols[col + 1].markdown(f"<div class='cell highlight'>{display}</div>", unsafe_allow_html=True)
+        elif symbol:
+            display = symbol
+            cols[col + 1].markdown(f"<div class='cell'>{display}</div>", unsafe_allow_html=True)
         elif not st.session_state.winner:
-            if cols[col + 1].button(" ", key=key):
+            if cols[col + 1].button(" ", key=f"{row}-{col}"):
                 if st.session_state.current_player == "⚫" and is_open_three(col, row, "⚫"):
                     st.warning("⚠️ 흑돌은 33 금지입니다!")
                     st.rerun()
@@ -92,15 +121,15 @@ for row in range(BOARD_SIZE):
                     st.session_state.current_player = "⚪" if st.session_state.current_player == "⚫" else "⚫"
                 st.rerun()
         else:
-            cols[col + 1].markdown(f"<div style='{btn_style}'></div>", unsafe_allow_html=True)
+            cols[col + 1].markdown("<div class='cell'></div>", unsafe_allow_html=True)
 
-# 상태 표시
+# 상태
 if not st.session_state.winner:
     st.write(f"현재 턴: {st.session_state.current_player}")
 else:
-    st.write(f"🏁 게임 종료")
+    st.write(f"🎉 게임 종료")
 
-# 리셋 버튼
+# 리셋
 if st.button("🔄 게임 리셋"):
     st.session_state.board = [["" for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
     st.session_state.current_player = "⚫"
